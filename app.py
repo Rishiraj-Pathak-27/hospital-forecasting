@@ -143,7 +143,7 @@ def classify_load(predictions_df, hours=48):
 
 
 def create_visualizations(predictions_df, load_info, time_period, hours):
-    """Create comprehensive interactive visualization plots using Plotly"""
+    """Create comprehensive interactive visualization plots using Plotly - optimized for faster loading"""
     
     # Ensure we have a proper dataframe copy
     df = predictions_df.copy()
@@ -157,6 +157,11 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
         df['timestamp'] = [now + timedelta(hours=i) for i in range(len(df))]
     else:
         df['timestamp'] = pd.to_datetime(df['timestamp'])
+    
+    # Downsample for long periods to improve rendering speed
+    if len(df) > 200:
+        step = max(1, len(df) // 150)  # Keep ~150 points for faster rendering
+        df = df.iloc[::step].reset_index(drop=True)
     
     # Create subplots
     fig = make_subplots(
@@ -304,14 +309,13 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
         row=2, col=2
     )
     
-    # Update layout
+    # Update layout - optimized for faster loading
     fig.update_layout(
         title_text=f'Hospital Emergency Predictions - {time_period}',
-        title_font_size=22,
+        title_font_size=20,
         title_x=0.5,
         showlegend=True,
-        height=1000,
-        width=1400,
+        height=850,
         hovermode='x unified',
         template='plotly_dark',
         legend=dict(
@@ -321,7 +325,7 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
             xanchor="right",
             x=1
         ),
-        margin=dict(l=80, r=80, t=100, b=80)
+        margin=dict(l=60, r=60, t=80, b=60)
     )
     
     # Update axes
@@ -402,12 +406,11 @@ def create_live_metrics_plot(predictions_df, load_info):
     
     fig.update_layout(
         title_text='Real-Time Metrics Dashboard',
-        title_font_size=22,
+        title_font_size=20,
         title_x=0.5,
-        height=450,
-        width=1400,
+        height=380,
         template='plotly_dark',
-        margin=dict(l=50, r=50, t=80, b=50)
+        margin=dict(l=40, r=40, t=60, b=40)
     )
     
     return fig
@@ -605,7 +608,7 @@ def predict_hospital_load(time_period):
 
 
 # Gradio Interface (compatible with Gradio 3.x)
-with gr.Blocks(title="Hospital Emergency Prediction") as app:
+with gr.Blocks(title="Hospital Emergency Prediction", theme=gr.themes.Soft()) as app:
     
     gr.Markdown("""
     # 🏥 Hospital Emergency Prediction System
