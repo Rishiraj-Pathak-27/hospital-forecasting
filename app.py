@@ -252,8 +252,11 @@ def predict_hospital_load(time_period):
         # CSV output
         csv_output = predictions_df.to_csv(index=False)
         
-        # Save files
-        csv_path = f"predictions_{time_period.replace(' ', '_')}.csv"
+        # Save files to outputs folder
+        os.makedirs("outputs/predictions", exist_ok=True)
+        os.makedirs("outputs/reports", exist_ok=True)
+        
+        csv_path = f"outputs/predictions/predictions_{time_period.replace(' ', '_')}.csv"
         predictions_df.to_csv(csv_path, index=False)
         
         # JSON report
@@ -276,7 +279,7 @@ def predict_hospital_load(time_period):
         }
         json_output = json.dumps(report, indent=2)
         
-        json_path = f"report_{time_period.replace(' ', '_')}.json"
+        json_path = f"outputs/reports/report_{time_period.replace(' ', '_')}.json"
         with open(json_path, 'w') as f:
             json.dump(report, f, indent=2)
         

@@ -10,9 +10,11 @@ venv/
 env/
 ENV/
 
-# Temporary prediction files
-data/predictions_*.csv
-reports/report_*.json
+# Generated output files
+outputs/
+predictions_*.csv
+report_*.json
+*.pkl.bak
 
 # IDE
 .vscode/
