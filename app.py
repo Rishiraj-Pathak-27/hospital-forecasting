@@ -10,19 +10,15 @@ from datetime import datetime, timedelta
 import json
 import os
 import sys
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from io import BytesIO
-import base64
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import plotly.express as px
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import prediction modules
 from scripts.predict_flexible import FlexiblePredictor
-
-# Set matplotlib style
-plt.style.use('seaborn-v0_8-darkgrid')
 
 # Initialize predictor at startup
 print("Initializing Hospital Prediction System...")
@@ -147,7 +143,7 @@ def classify_load(predictions_df, hours=48):
 
 
 def create_visualizations(predictions_df, load_info, time_period, hours):
-    """Create comprehensive visualization plots"""
+    """Create comprehensive interactive visualization plots using Plotly"""
     
     # Ensure we have a proper dataframe copy
     df = predictions_df.copy()
@@ -162,134 +158,254 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     else:
         df['timestamp'] = pd.to_datetime(df['timestamp'])
     
-    # Create figure with 4 subplots
-    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
-    fig.suptitle(f'Hospital Emergency Predictions - {time_period}', fontsize=16, fontweight='bold')
+    # Create subplots
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=('Emergency Admissions Forecast', 'ICU Demand Forecast',
+                       'Staff Workload Forecast', 'Peak vs Average Comparison'),
+        specs=[[{"secondary_y": False}, {"secondary_y": False}],
+               [{"secondary_y": False}, {"type": "bar"}]],
+        vertical_spacing=0.12,
+        horizontal_spacing=0.1
+    )
     
     # Color scheme
     colors = {
         'admissions': '#FF6B6B',
         'icu': '#4ECDC4',
         'staff': '#95E1D3',
-        'threshold': '#FFA07A'
+        'threshold': '#FFA07A',
+        'avg': '#6C5CE7',
+        'peak': '#FD79A8'
     }
     
     # 1. Emergency Admissions Over Time
-    ax1 = axes[0, 0]
-    ax1.plot(df['timestamp'], 
-             df['predicted_emergency_admissions'], 
-             color=colors['admissions'], linewidth=2.5, label='Predicted Admissions')
-    ax1.axhline(y=load_info['avg_admissions'], color=colors['threshold'], 
-                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_admissions"]:.1f}')
-    ax1.fill_between(df['timestamp'], 
-                     df['predicted_emergency_admissions'], 
-                     alpha=0.3, color=colors['admissions'])
-    ax1.set_xlabel('Time', fontsize=11, fontweight='bold')
-    ax1.set_ylabel('Admissions per Hour', fontsize=11, fontweight='bold')
-    ax1.set_title('Emergency Admissions Forecast', fontsize=13, fontweight='bold')
-    ax1.legend(loc='upper right', framealpha=0.9)
-    ax1.grid(True, alpha=0.3)
-    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
-    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=df['predicted_emergency_admissions'],
+            mode='lines',
+            name='Predicted Admissions',
+            line=dict(color=colors['admissions'], width=3),
+            fill='tozeroy',
+            fillcolor=f'rgba(255, 107, 107, 0.2)',
+            hovertemplate='<b>%{x|%b %d, %H:%M}</b><br>Admissions: %{y:.1f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=[load_info['avg_admissions']] * len(df),
+            mode='lines',
+            name=f'Average: {load_info["avg_admissions"]:.1f}',
+            line=dict(color=colors['threshold'], width=2, dash='dash'),
+            hovertemplate='Average: %{y:.1f}<extra></extra>'
+        ),
+        row=1, col=1
+    )
     
     # 2. ICU Demand Over Time
-    ax2 = axes[0, 1]
-    ax2.plot(df['timestamp'], 
-             df['predicted_icu_demand'], 
-             color=colors['icu'], linewidth=2.5, label='ICU Demand')
-    ax2.axhline(y=load_info['avg_icu'], color=colors['threshold'], 
-                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_icu"]:.1f}')
-    ax2.axhline(y=20, color='red', linestyle=':', linewidth=2, label='Capacity: 20 beds')
-    ax2.fill_between(df['timestamp'], 
-                     df['predicted_icu_demand'], 
-                     alpha=0.3, color=colors['icu'])
-    ax2.set_xlabel('Time', fontsize=11, fontweight='bold')
-    ax2.set_ylabel('ICU Beds Required', fontsize=11, fontweight='bold')
-    ax2.set_title('ICU Demand Forecast', fontsize=13, fontweight='bold')
-    ax2.legend(loc='upper right', framealpha=0.9)
-    ax2.grid(True, alpha=0.3)
-    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
-    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=df['predicted_icu_demand'],
+            mode='lines',
+            name='ICU Demand',
+            line=dict(color=colors['icu'], width=3),
+            fill='tozeroy',
+            fillcolor=f'rgba(78, 205, 196, 0.2)',
+            hovertemplate='<b>%{x|%b %d, %H:%M}</b><br>ICU Beds: %{y:.1f}<extra></extra>'
+        ),
+        row=1, col=2
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=[load_info['avg_icu']] * len(df),
+            mode='lines',
+            name=f'Avg ICU: {load_info["avg_icu"]:.1f}',
+            line=dict(color=colors['threshold'], width=2, dash='dash'),
+            hovertemplate='Average: %{y:.1f}<extra></extra>'
+        ),
+        row=1, col=2
+    )
+    
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=[20] * len(df),
+            mode='lines',
+            name='Capacity: 20 beds',
+            line=dict(color='red', width=2, dash='dot'),
+            hovertemplate='Capacity: 20 beds<extra></extra>'
+        ),
+        row=1, col=2
+    )
     
     # 3. Staff Workload Over Time
-    ax3 = axes[1, 0]
-    ax3.plot(df['timestamp'], 
-             df['predicted_staff_workload'], 
-             color=colors['staff'], linewidth=2.5, label='Staff Workload')
-    ax3.axhline(y=load_info['avg_staff'], color=colors['threshold'], 
-                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_staff"]:.2f}')
-    ax3.fill_between(df['timestamp'], 
-                     df['predicted_staff_workload'], 
-                     alpha=0.3, color=colors['staff'])
-    ax3.set_xlabel('Time', fontsize=11, fontweight='bold')
-    ax3.set_ylabel('Workload Index', fontsize=11, fontweight='bold')
-    ax3.set_title('Staff Workload Forecast', fontsize=13, fontweight='bold')
-    ax3.legend(loc='upper right', framealpha=0.9)
-    ax3.grid(True, alpha=0.3)
-    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
-    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=df['predicted_staff_workload'],
+            mode='lines',
+            name='Staff Workload',
+            line=dict(color=colors['staff'], width=3),
+            fill='tozeroy',
+            fillcolor=f'rgba(149, 225, 211, 0.2)',
+            hovertemplate='<b>%{x|%b %d, %H:%M}</b><br>Workload: %{y:.2f}<extra></extra>'
+        ),
+        row=2, col=1
+    )
     
-    # 4. Comparative Bar Chart - Peak vs Average
-    ax4 = axes[1, 1]
-    metrics = ['Admissions', 'ICU Beds', 'Staff\nWorkload']
+    fig.add_trace(
+        go.Scatter(
+            x=df['timestamp'],
+            y=[load_info['avg_staff']] * len(df),
+            mode='lines',
+            name=f'Avg Staff: {load_info["avg_staff"]:.2f}',
+            line=dict(color=colors['threshold'], width=2, dash='dash'),
+            hovertemplate='Average: %{y:.2f}<extra></extra>'
+        ),
+        row=2, col=1
+    )
+    
+    # 4. Peak vs Average Comparison
+    metrics = ['Admissions', 'ICU Beds', 'Staff<br>Workload']
     avg_values = [load_info['avg_admissions'], load_info['avg_icu'], load_info['avg_staff']]
     peak_values = [load_info['peak_admissions'], load_info['peak_icu'], 
                    df['predicted_staff_workload'].max()]
     
-    x = np.arange(len(metrics))
-    width = 0.35
+    fig.add_trace(
+        go.Bar(
+            x=metrics,
+            y=avg_values,
+            name='Average',
+            marker_color=colors['avg'],
+            text=[f'{v:.1f}' for v in avg_values],
+            textposition='outside',
+            hovertemplate='<b>%{x}</b><br>Average: %{y:.1f}<extra></extra>'
+        ),
+        row=2, col=2
+    )
     
-    bars1 = ax4.bar(x - width/2, avg_values, width, label='Average', 
-                    color='#6C5CE7', alpha=0.8)
-    bars2 = ax4.bar(x + width/2, peak_values, width, label='Peak', 
-                    color='#FD79A8', alpha=0.8)
+    fig.add_trace(
+        go.Bar(
+            x=metrics,
+            y=peak_values,
+            name='Peak',
+            marker_color=colors['peak'],
+            text=[f'{v:.1f}' for v in peak_values],
+            textposition='outside',
+            hovertemplate='<b>%{x}</b><br>Peak: %{y:.1f}<extra></extra>'
+        ),
+        row=2, col=2
+    )
     
-    ax4.set_ylabel('Value', fontsize=11, fontweight='bold')
-    ax4.set_title('Peak vs Average Comparison', fontsize=13, fontweight='bold')
-    ax4.set_xticks(x)
-    ax4.set_xticklabels(metrics)
-    ax4.legend(loc='upper right', framealpha=0.9)
-    ax4.grid(True, alpha=0.3, axis='y')
+    # Update layout
+    fig.update_layout(
+        title_text=f'Hospital Emergency Predictions - {time_period}',
+        title_font_size=20,
+        title_x=0.5,
+        showlegend=True,
+        height=900,
+        hovermode='x unified',
+        template='plotly_dark',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
     
-    # Add value labels on bars
-    for bars in [bars1, bars2]:
-        for bar in bars:
-            height = bar.get_height()
-            ax4.text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}',
-                    ha='center', va='bottom', fontsize=9, fontweight='bold')
+    # Update axes
+    fig.update_xaxes(title_text="Time", row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Time", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Time", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Metric", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
     
-    plt.tight_layout()
+    fig.update_yaxes(title_text="Admissions/Hour", row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="ICU Beds", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="Workload Index", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="Value", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
     
     return fig
 
 
 def create_live_metrics_plot(predictions_df, load_info):
-    """Create real-time metrics dashboard visualization"""
+    """Create real-time metrics dashboard visualization with Plotly"""
     
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-    fig.suptitle('Real-Time Metrics Dashboard', fontsize=14, fontweight='bold')
+    # Create figure with indicators
+    fig = make_subplots(
+        rows=1, cols=3,
+        specs=[[{"type": "indicator"}, {"type": "indicator"}, {"type": "indicator"}]],
+        subplot_titles=('Total Admissions', 'Average ICU Demand', 'Average Staff Workload')
+    )
     
-    # Metrics data
-    metrics = [
-        ('Total Admissions', load_info['total_admissions'], '#FF6B6B'),
-        ('Avg ICU Demand', load_info['avg_icu'], '#4ECDC4'),
-        ('Peak Staff', load_info['avg_staff'], '#95E1D3')
-    ]
+    # Total Admissions indicator
+    fig.add_trace(
+        go.Indicator(
+            mode="number+delta",
+            value=load_info['total_admissions'],
+            title={'text': "Total Admissions", 'font': {'size': 18}},
+            number={'font': {'size': 50, 'color': '#FF6B6B'}},
+            delta={'reference': load_info['total_admissions'] * 0.9, 'relative': True},
+            domain={'x': [0, 1], 'y': [0, 1]}
+        ),
+        row=1, col=1
+    )
     
-    for idx, (label, value, color) in enumerate(metrics):
-        ax = axes[idx]
-        ax.bar([0], [value], color=color, alpha=0.7, width=0.6)
-        ax.set_xlim(-0.5, 0.5)
-        ax.set_xticks([])
-        ax.set_title(label, fontsize=12, fontweight='bold')
-        ax.set_ylabel('Value', fontsize=10)
-        ax.text(0, value/2, f'{value:.1f}', 
-                ha='center', va='center', fontsize=24, 
-                fontweight='bold', color='white')
-        ax.grid(True, alpha=0.3, axis='y')
+    # ICU Demand indicator
+    fig.add_trace(
+        go.Indicator(
+            mode="number+gauge",
+            value=load_info['avg_icu'],
+            title={'text': "Avg ICU Demand", 'font': {'size': 18}},
+            number={'font': {'size': 50, 'color': '#4ECDC4'}},
+            gauge={
+                'axis': {'range': [None, 20], 'tickwidth': 1},
+                'bar': {'color': '#4ECDC4'},
+                'steps': [
+                    {'range': [0, 10], 'color': 'rgba(78, 205, 196, 0.3)'},
+                    {'range': [10, 15], 'color': 'rgba(255, 167, 122, 0.3)'},
+                    {'range': [15, 20], 'color': 'rgba(255, 107, 107, 0.3)'}
+                ],
+                'threshold': {
+                    'line': {'color': 'red', 'width': 4},
+                    'thickness': 0.75,
+                    'value': 18
+                }
+            },
+            domain={'x': [0, 1], 'y': [0, 1]}
+        ),
+        row=1, col=2
+    )
     
-    plt.tight_layout()
+    # Staff Workload indicator
+    fig.add_trace(
+        go.Indicator(
+            mode="number+delta",
+            value=load_info['avg_staff'],
+            title={'text': "Avg Staff Workload", 'font': {'size': 18}},
+            number={'font': {'size': 50, 'color': '#95E1D3'}},
+            delta={'reference': 0.5, 'relative': False},
+            domain={'x': [0, 1], 'y': [0, 1]}
+        ),
+        row=1, col=3
+    )
+    
+    fig.update_layout(
+        title_text='Real-Time Metrics Dashboard',
+        title_font_size=20,
+        title_x=0.5,
+        height=400,
+        template='plotly_dark'
+    )
+    
     return fig
 
 
@@ -472,8 +588,15 @@ def predict_hospital_load(time_period):
         
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}"
-        empty_fig = plt.figure(figsize=(10, 6))
-        plt.text(0.5, 0.5, 'Error generating plot', ha='center', va='center')
+        # Create empty Plotly figure for errors
+        empty_fig = go.Figure()
+        empty_fig.add_annotation(
+            text=f"Error generating plot: {str(e)}",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=16, color="red")
+        )
+        empty_fig.update_layout(template='plotly_dark', height=400)
         return error_msg, "", "", "", "", None, "", None, empty_fig, empty_fig, ""
 
 
