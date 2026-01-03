@@ -160,16 +160,16 @@ class FlexiblePredictor:
         future_features['icu_demand_lag_14h'] = np.full(hours, recent_icu[-14] if len(recent_icu) >= 14 else recent_icu[-1])
         
         # Generate realistic emergency admissions with patterns
-        base_rate = self.data['emergency_admissions'].tail(168).mean()
-        hourly_pattern = 1 + 0.3 * np.sin(2 * np.pi * (future_dates.hour - 18) / 24)  # Peak evening
-        day_pattern = 1 + 0.2 * (future_dates.dayofweek >= 4).astype(float)  # Higher on weekends
+        base_rate = float(self.data['emergency_admissions'].tail(168).mean())
+        hourly_pattern = 1 + 0.3 * np.sin(2 * np.pi * (future_dates.hour.values - 18) / 24)  # Peak evening
+        day_pattern = 1 + 0.2 * (future_dates.dayofweek.values >= 4).astype(float)  # Higher on weekends
         noise = np.random.normal(0, 0.15, hours)
         emergency_admissions = base_rate * hourly_pattern * day_pattern * (1 + noise)
         emergency_admissions = np.maximum(emergency_admissions, 0.5)  # Minimum 0.5
         
         # Predict ICU and staff using XGBoost models
-        icu_predictions = self.icu_predictor.predict(future_features[self.icu_predictor.feature_cols])
-        staff_predictions = self.staff_predictor.predict(future_features[self.staff_predictor.feature_cols])
+        icu_predictions = self.icu_predictor.predict(future_features[self.icu_predictor.feature_cols].values)
+        staff_predictions = self.staff_predictor.predict(future_features[self.staff_predictor.feature_cols].values)
         
         # Create predictions DataFrame
         predictions_df = pd.DataFrame({
