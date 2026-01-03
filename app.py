@@ -309,23 +309,23 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
         row=2, col=2
     )
     
-    # Update layout - optimized for faster loading
+    # Update layout - all 4 graphs visible at once
     fig.update_layout(
         title_text=f'Hospital Emergency Predictions - {time_period}',
         title_font_size=20,
         title_x=0.5,
         showlegend=True,
-        height=850,
+        height=1100,
         hovermode='x unified',
         template='plotly_dark',
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
+            y=-0.15,
+            xanchor="center",
+            x=0.5
         ),
-        margin=dict(l=60, r=60, t=80, b=60)
+        margin=dict(l=60, r=60, t=80, b=100)
     )
     
     # Update axes
