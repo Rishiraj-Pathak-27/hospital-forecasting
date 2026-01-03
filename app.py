@@ -166,12 +166,36 @@ def predict_hospital_load(date_input, time_period, auto_classify):
     Main prediction function for Gradio interface
     """
     try:
-        # If auto-classify is enabled, use default 48h prediction
+        # If auto-classify is enabled, use default 48h prediction from now
         if auto_classify:
             hours = 48
+            start_offset = 0
             period_name = "Next 48 Hours (Auto)"
             status_msg = "📊 Automatic load classification - Next 48 hours"
         else:
+            # Parse user's date input
+            try:
+                selected_date = datetime.strptime(date_input, "%Y-%m-%d")
+                current_date = datetime.now()
+                
+                # Calculate hours from now to selected date (start of day)
+                delta = selected_date - current_date
+                start_offset = int(delta.total_seconds() / 3600)
+                
+                # Allow same-day predictions (if offset is slightly negative due to time)
+                if start_offset < 0 and start_offset >= -24:
+                    start_offset = 0  # Start from now if selecting today
+                
+                # Validate the offset
+                if start_offset < -24:
+                    return "❌ Error: Cannot predict for past dates!", "", "", "", "", None, "", None
+                
+                if start_offset > 336:  # Max 14 days ahead
+                    return "❌ Error: Maximum prediction range is 14 days (336 hours) ahead!", "", "", "", "", None, "", None
+                    
+            except ValueError:
+                return "❌ Error: Invalid date format! Please use YYYY-MM-DD format.", "", "", "", "", None, "", None
+            
             # Map time period to hours
             period_mapping = {
                 "24h": 24,
@@ -189,13 +213,17 @@ def predict_hospital_load(date_input, time_period, auto_classify):
             
             hours = period_mapping.get(time_period, 48)
             period_name = period_names.get(time_period, f"Next {hours} Hours")
-            status_msg = f"✅ Prediction for: {period_name} (starting {date_input})"
+            
+            # Format display dates
+            prediction_start = current_date + timedelta(hours=start_offset)
+            prediction_end = prediction_start + timedelta(hours=hours)
+            status_msg = f"✅ Prediction: {period_name} starting {prediction_start.strftime('%Y-%m-%d %H:%M')} to {prediction_end.strftime('%Y-%m-%d %H:%M')}"
         
-        # Make predictions
+        # Make predictions with calculated offset
         predictions_df, optimization = predictor._predict_period(
             hours=hours,
             period_name=period_name,
-            start_offset=0
+            start_offset=start_offset
         )
         
         # Classify load
@@ -312,8 +340,10 @@ with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Sof
             )
             
             date_input = gr.Textbox(
-                label="Date (YYYY-MM-DD)",
-                value=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
+                label="Start Date (YYYY-MM-DD)",
+                value=datetime.now().strftime("%Y-%m-%d"),
+                placeholder="Enter start date for prediction (e.g., 2026-01-05)",
+                info="Predictions will start from this date"
             )
             
             time_period = gr.Radio(
