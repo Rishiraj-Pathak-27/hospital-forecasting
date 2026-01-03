@@ -10,12 +10,19 @@ from datetime import datetime, timedelta
 import json
 import os
 import sys
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from io import BytesIO
+import base64
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # Import prediction modules
 from scripts.predict_flexible import FlexiblePredictor
+
+# Set matplotlib style
+plt.style.use('seaborn-v0_8-darkgrid')
 
 # Initialize predictor at startup
 print("Initializing Hospital Prediction System...")
@@ -137,6 +144,143 @@ def classify_load(predictions_df, hours=48):
         'icu_utilization': icu_utilization,
         'total_admissions': total_admissions
     }
+
+
+def create_visualizations(predictions_df, load_info, time_period, hours):
+    """Create comprehensive visualization plots"""
+    
+    # Convert timestamp to datetime
+    predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
+    
+    # Create figure with 4 subplots
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle(f'Hospital Emergency Predictions - {time_period}', fontsize=16, fontweight='bold')
+    
+    # Color scheme
+    colors = {
+        'admissions': '#FF6B6B',
+        'icu': '#4ECDC4',
+        'staff': '#95E1D3',
+        'threshold': '#FFA07A'
+    }
+    
+    # 1. Emergency Admissions Over Time
+    ax1 = axes[0, 0]
+    ax1.plot(predictions_df['timestamp'], 
+             predictions_df['predicted_emergency_admissions'], 
+             color=colors['admissions'], linewidth=2.5, label='Predicted Admissions')
+    ax1.axhline(y=load_info['avg_admissions'], color=colors['threshold'], 
+                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_admissions"]:.1f}')
+    ax1.fill_between(predictions_df['timestamp'], 
+                     predictions_df['predicted_emergency_admissions'], 
+                     alpha=0.3, color=colors['admissions'])
+    ax1.set_xlabel('Time', fontsize=11, fontweight='bold')
+    ax1.set_ylabel('Admissions per Hour', fontsize=11, fontweight='bold')
+    ax1.set_title('Emergency Admissions Forecast', fontsize=13, fontweight='bold')
+    ax1.legend(loc='upper right', framealpha=0.9)
+    ax1.grid(True, alpha=0.3)
+    ax1.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+    plt.setp(ax1.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 2. ICU Demand Over Time
+    ax2 = axes[0, 1]
+    ax2.plot(predictions_df['timestamp'], 
+             predictions_df['predicted_icu_demand'], 
+             color=colors['icu'], linewidth=2.5, label='ICU Demand')
+    ax2.axhline(y=load_info['avg_icu'], color=colors['threshold'], 
+                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_icu"]:.1f}')
+    ax2.axhline(y=20, color='red', linestyle=':', linewidth=2, label='Capacity: 20 beds')
+    ax2.fill_between(predictions_df['timestamp'], 
+                     predictions_df['predicted_icu_demand'], 
+                     alpha=0.3, color=colors['icu'])
+    ax2.set_xlabel('Time', fontsize=11, fontweight='bold')
+    ax2.set_ylabel('ICU Beds Required', fontsize=11, fontweight='bold')
+    ax2.set_title('ICU Demand Forecast', fontsize=13, fontweight='bold')
+    ax2.legend(loc='upper right', framealpha=0.9)
+    ax2.grid(True, alpha=0.3)
+    ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+    plt.setp(ax2.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 3. Staff Workload Over Time
+    ax3 = axes[1, 0]
+    ax3.plot(predictions_df['timestamp'], 
+             predictions_df['predicted_staff_workload'], 
+             color=colors['staff'], linewidth=2.5, label='Staff Workload')
+    ax3.axhline(y=load_info['avg_staff'], color=colors['threshold'], 
+                linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_staff"]:.2f}')
+    ax3.fill_between(predictions_df['timestamp'], 
+                     predictions_df['predicted_staff_workload'], 
+                     alpha=0.3, color=colors['staff'])
+    ax3.set_xlabel('Time', fontsize=11, fontweight='bold')
+    ax3.set_ylabel('Workload Index', fontsize=11, fontweight='bold')
+    ax3.set_title('Staff Workload Forecast', fontsize=13, fontweight='bold')
+    ax3.legend(loc='upper right', framealpha=0.9)
+    ax3.grid(True, alpha=0.3)
+    ax3.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d %H:%M'))
+    plt.setp(ax3.xaxis.get_majorticklabels(), rotation=45, ha='right')
+    
+    # 4. Comparative Bar Chart - Peak vs Average
+    ax4 = axes[1, 1]
+    metrics = ['Admissions', 'ICU Beds', 'Staff\nWorkload']
+    avg_values = [load_info['avg_admissions'], load_info['avg_icu'], load_info['avg_staff']]
+    peak_values = [load_info['peak_admissions'], load_info['peak_icu'], 
+                   predictions_df['predicted_staff_workload'].max()]
+    
+    x = np.arange(len(metrics))
+    width = 0.35
+    
+    bars1 = ax4.bar(x - width/2, avg_values, width, label='Average', 
+                    color='#6C5CE7', alpha=0.8)
+    bars2 = ax4.bar(x + width/2, peak_values, width, label='Peak', 
+                    color='#FD79A8', alpha=0.8)
+    
+    ax4.set_ylabel('Value', fontsize=11, fontweight='bold')
+    ax4.set_title('Peak vs Average Comparison', fontsize=13, fontweight='bold')
+    ax4.set_xticks(x)
+    ax4.set_xticklabels(metrics)
+    ax4.legend(loc='upper right', framealpha=0.9)
+    ax4.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels on bars
+    for bars in [bars1, bars2]:
+        for bar in bars:
+            height = bar.get_height()
+            ax4.text(bar.get_x() + bar.get_width()/2., height,
+                    f'{height:.1f}',
+                    ha='center', va='bottom', fontsize=9, fontweight='bold')
+    
+    plt.tight_layout()
+    
+    return fig
+
+
+def create_live_metrics_plot(predictions_df, load_info):
+    """Create real-time metrics dashboard visualization"""
+    
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+    fig.suptitle('Real-Time Metrics Dashboard', fontsize=14, fontweight='bold')
+    
+    # Metrics data
+    metrics = [
+        ('Total Admissions', load_info['total_admissions'], '#FF6B6B'),
+        ('Avg ICU Demand', load_info['avg_icu'], '#4ECDC4'),
+        ('Peak Staff', load_info['avg_staff'], '#95E1D3')
+    ]
+    
+    for idx, (label, value, color) in enumerate(metrics):
+        ax = axes[idx]
+        ax.bar([0], [value], color=color, alpha=0.7, width=0.6)
+        ax.set_xlim(-0.5, 0.5)
+        ax.set_xticks([])
+        ax.set_title(label, fontsize=12, fontweight='bold')
+        ax.set_ylabel('Value', fontsize=10)
+        ax.text(0, value/2, f'{value:.1f}', 
+                ha='center', va='center', fontsize=24, 
+                fontweight='bold', color='white')
+        ax.grid(True, alpha=0.3, axis='y')
+    
+    plt.tight_layout()
+    return fig
 
 
 def predict_hospital_load(time_period):
@@ -283,11 +427,44 @@ def predict_hospital_load(time_period):
         with open(json_path, 'w') as f:
             json.dump(report, f, indent=2)
         
-        return status_msg, summary, alerts_text, detailed, csv_output, csv_path, json_output, json_path
+        # Create visualizations
+        main_plot = create_visualizations(predictions_df, load_info, time_period, hours)
+        metrics_plot = create_live_metrics_plot(predictions_df, load_info)
+        
+        # Real-time data text
+        realtime_text = f"""
+## 📡 Real-Time Prediction Data
+
+**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+### Current Metrics
+- **Total Predicted Admissions:** {int(load_info['total_admissions'])}
+- **Average Hourly Admissions:** {load_info['avg_admissions']:.2f}
+- **Peak Hourly Admissions:** {load_info['peak_admissions']:.2f}
+- **Average ICU Demand:** {load_info['avg_icu']:.2f} beds
+- **Peak ICU Demand:** {load_info['peak_icu']:.2f} beds
+- **ICU Utilization:** {load_info['icu_utilization']:.1f}%
+- **Average Staff Workload:** {load_info['avg_staff']:.2f}
+
+### Environmental Factors
+- **Prediction Window:** {hours} hours
+- **Period:** {time_period}
+- **Status:** {optimization['preparedness_plan']['status']}
+
+### Load Classification
+- **Classification:** {load_info['classification']}
+- **Load Score:** {load_info['score']}/13
+- **Recommendation:** {load_info['recommendation']}
+"""
+        
+        return (status_msg, summary, alerts_text, detailed, csv_output, csv_path, 
+                json_output, json_path, main_plot, metrics_plot, realtime_text)
         
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}"
-        return error_msg, "", "", "", "", None, "", None
+        empty_fig = plt.figure(figsize=(10, 6))
+        plt.text(0.5, 0.5, 'Error generating plot', ha='center', va='center')
+        return error_msg, "", "", "", "", None, "", None, empty_fig, empty_fig, ""
 
 
 # Gradio Interface (compatible with Gradio 3.x)
@@ -315,6 +492,7 @@ with gr.Blocks(title="Hospital Emergency Prediction") as app:
             - **ICU Demand**: Intensive care bed needs
             - **Staffing**: Optimal personnel allocation
             - **Models**: XGBoost trained on 180 days data
+            - **Visualizations**: Real-time graphs & metrics
             """)
         
         with gr.Column(scale=2):
@@ -324,10 +502,19 @@ with gr.Blocks(title="Hospital Emergency Prediction") as app:
                 with gr.Tab("📊 Summary"):
                     summary_output = gr.Markdown("Results will appear here...")
                 
+                with gr.Tab("📈 Forecasts"):
+                    gr.Markdown("### Hourly Predictions Over Time")
+                    main_plot_output = gr.Plot(label="Prediction Graphs")
+                
+                with gr.Tab("📡 Real-Time Data"):
+                    gr.Markdown("### Live Metrics Dashboard")
+                    metrics_plot_output = gr.Plot(label="Metrics")
+                    realtime_output = gr.Markdown("Real-time data will appear here...")
+                
                 with gr.Tab("⚠️ Alerts"):
                     alerts_output = gr.Markdown("Alerts will appear here...")
                 
-                with gr.Tab("📈 Details"):
+                with gr.Tab("📋 Details"):
                     detailed_output = gr.Markdown("Detailed metrics...")
                 
                 with gr.Tab("💾 Download"):
@@ -340,7 +527,8 @@ with gr.Blocks(title="Hospital Emergency Prediction") as app:
         fn=predict_hospital_load,
         inputs=[time_period],
         outputs=[status_output, summary_output, alerts_output, detailed_output, 
-                 csv_output, csv_download, json_output, json_download]
+                 csv_output, csv_download, json_output, json_download,
+                 main_plot_output, metrics_plot_output, realtime_output]
     )
 
 if __name__ == "__main__":
