@@ -169,17 +169,22 @@ def predict_hospital_load(date_input, time_period, auto_classify):
             period_name = "Next 48 Hours (Auto)"
             status_msg = "📊 Automatic load classification - Next 48 hours"
         else:
-            # Validate date selection
-            hours, error = validate_date_selection(date_input, time_period)
-            if error:
-                return error, "", "", "", ""
+            # Map time period to hours
+            period_mapping = {
+                "24h": 24,
+                "48h": 48,
+                "7days": 168,
+                "14days": 336
+            }
             
             period_names = {
                 "24h": "Next 24 Hours",
                 "48h": "Next 48 Hours", 
-                "week": "Next Week (7 Days)",
-                "2weeks": "Week to Next Week"
+                "7days": "Next 7 Days",
+                "14days": "Next 14 Days"
             }
+            
+            hours = period_mapping.get(time_period, 48)
             period_name = period_names.get(time_period, f"Next {hours} Hours")
             status_msg = f"✅ Prediction for: {period_name} (starting {date_input})"
         
@@ -254,6 +259,11 @@ def predict_hospital_load(date_input, time_period, auto_classify):
         # Convert predictions to CSV format for download
         csv_output = predictions_df.to_csv(index=False)
         
+        # Save CSV file for download
+        csv_filename = f"predictions_{period_name.replace(' ', '_').replace('(', '').replace(')', '')}.csv"
+        csv_path = os.path.join("data", csv_filename)
+        predictions_df.to_csv(csv_path, index=False)
+        
         # Create JSON report
         report = {
             'period': period_name,
@@ -274,11 +284,17 @@ def predict_hospital_load(date_input, time_period, auto_classify):
         }
         json_output = json.dumps(report, indent=2)
         
-        return status_msg, summary, alerts_text, detailed, csv_output, json_output
+        # Save JSON file for download
+        json_filename = f"report_{period_name.replace(' ', '_').replace('(', '').replace(')', '')}.json"
+        json_path = os.path.join("reports", json_filename)
+        with open(json_path, 'w') as f:
+            json.dump(report, f, indent=2)
+        
+        return status_msg, summary, alerts_text, detailed, csv_output, csv_path, json_output, json_path
         
     except Exception as e:
         error_msg = f"❌ Error: {str(e)}\n\nPlease try again or contact support."
-        return error_msg, "", "", "", "", ""
+        return error_msg, "", "", "", "", None, "", None
 
 # Create Gradio Interface
 with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Soft()) as app:
@@ -289,7 +305,7 @@ with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Sof
         with gr.Column(scale=1):
             auto_mode = gr.Checkbox(
                 label="Auto-Classify",
-                value=True
+                value=False
             )
             
             date_input = gr.Textbox(
@@ -301,8 +317,8 @@ with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Sof
                 choices=[
                     ("24 Hours", "24h"),
                     ("48 Hours", "48h"),
-                    ("7 Days", "week"),
-                    ("14 Days", "2weeks")
+                    ("7 Days", "7days"),
+                    ("14 Days", "14days")
                 ],
                 value="48h",
                 label="Period"
@@ -326,23 +342,26 @@ with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Sof
                 with gr.Tab("💾 Download Data"):
                     gr.Markdown("### Download Predictions")
                     csv_output = gr.Textbox(
-                        label="CSV Data (Copy or Download)",
+                        label="CSV Data Preview",
                         lines=10,
                         max_lines=20,
                         placeholder="Prediction data in CSV format..."
                     )
+                    csv_download = gr.File(label="📥 Download CSV File")
+                    
                     json_output = gr.Textbox(
-                        label="JSON Report (Copy or Download)",
+                        label="JSON Report Preview",
                         lines=10,
                         max_lines=20,
                         placeholder="Full report in JSON format..."
                     )
+                    json_download = gr.File(label="📥 Download JSON File")
     
     # Connect button to prediction function
     predict_btn.click(
         fn=predict_hospital_load,
         inputs=[date_input, time_period, auto_mode],
-        outputs=[status_output, summary_output, alerts_output, detailed_output, csv_output, json_output]
+        outputs=[status_output, summary_output, alerts_output, detailed_output, csv_output, csv_download, json_output, json_download]
     )
     
 
