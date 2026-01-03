@@ -139,18 +139,24 @@ class FlexiblePredictor:
             'month': future_dates.month,
             'is_weekend': (future_dates.dayofweek >= 5).astype(int),
             'temperature': 20 + 5 * np.sin(2 * np.pi * future_dates.hour / 24),
-            'flu_season': ((future_dates.month >= 11) | (future_dates.month <= 2)).astype(int),
-            'air_quality': 60 + 20 * np.random.randn(hours)
+            'flu_season_index': ((future_dates.month >= 11) | (future_dates.month <= 2)).astype(float),
+            'air_quality_index': 60 + 20 * np.random.randn(hours)
         })
         
         # Add lag features from historical data (repeat last known values)
         recent_admissions = self.data['emergency_admissions'].tail(24).values
-        last_admission = recent_admissions[-1]
+        recent_icu = self.data['icu_demand'].tail(24).values
         
-        future_features['lag_1h'] = np.full(hours, last_admission)
-        future_features['lag_24h'] = np.full(hours, recent_admissions[0] if len(recent_admissions) > 0 else last_admission)
-        future_features['rolling_mean_3h'] = np.full(hours, np.mean(recent_admissions[-3:]))
-        future_features['rolling_mean_24h'] = np.full(hours, np.mean(recent_admissions))
+        future_features['emergency_admissions_lag_1h'] = np.full(hours, recent_admissions[-1])
+        future_features['emergency_admissions_lag_7h'] = np.full(hours, recent_admissions[-7] if len(recent_admissions) >= 7 else recent_admissions[-1])
+        future_features['emergency_admissions_lag_14h'] = np.full(hours, recent_admissions[-14] if len(recent_admissions) >= 14 else recent_admissions[-1])
+        future_features['emergency_admissions_rolling_3h'] = np.full(hours, np.mean(recent_admissions[-3:]))
+        future_features['emergency_admissions_rolling_7h'] = np.full(hours, np.mean(recent_admissions[-7:]))
+        future_features['emergency_admissions_rolling_14h'] = np.full(hours, np.mean(recent_admissions[-14:]))
+        
+        future_features['icu_demand_lag_1h'] = np.full(hours, recent_icu[-1])
+        future_features['icu_demand_lag_7h'] = np.full(hours, recent_icu[-7] if len(recent_icu) >= 7 else recent_icu[-1])
+        future_features['icu_demand_lag_14h'] = np.full(hours, recent_icu[-14] if len(recent_icu) >= 14 else recent_icu[-1])
         
         # Generate realistic emergency admissions with patterns
         base_rate = self.data['emergency_admissions'].tail(168).mean()
