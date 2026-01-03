@@ -44,37 +44,43 @@ def classify_load(predictions_df):
             'icu_utilization': 2.5
         }
     
-    # Scoring based on metrics
+    # Scoring based on metrics (adjusted thresholds for better sensitivity)
     score = 0
     
-    # Admission scoring
-    if avg_admissions > 4.0:
+    # Admission scoring (lowered thresholds)
+    if avg_admissions > 2.5:
         score += 3
-    elif avg_admissions > 2.5:
+    elif avg_admissions > 1.8:
         score += 2
-    elif avg_admissions > 1.5:
+    elif avg_admissions > 1.0:
         score += 1
     
-    # ICU scoring
-    if avg_icu > 1.5:
+    # ICU scoring (lowered thresholds)
+    if avg_icu > 0.5:
         score += 3
-    elif avg_icu > 0.8:
+    elif avg_icu > 0.25:
         score += 2
-    elif avg_icu > 0.3:
+    elif avg_icu > 0.1:
         score += 1
     
-    # Peak scoring
-    if peak_admissions > 5.0:
+    # Peak scoring (lowered thresholds)
+    if peak_admissions > 3.5:
         score += 3
-    elif peak_admissions > 3.0:
+    elif peak_admissions > 2.5:
         score += 2
-    elif peak_admissions > 2.0:
+    elif peak_admissions > 1.5:
+        score += 1
+    
+    # Staff workload scoring (new factor)
+    if avg_staff > 1.0:
+        score += 2
+    elif avg_staff > 0.5:
         score += 1
     
     icu_utilization = (avg_icu / 20) * 100
     
-    # Classification
-    if score >= 7:
+    # Classification (adjusted score ranges for 11-point scale)
+    if score >= 8:
         load_class = "🔴 HIGH LOAD"
         recommendation = "⚠️ High patient volume expected. Increase staff by 40-50%. Activate overflow protocols."
     elif score >= 4:
@@ -151,16 +157,16 @@ def predict_hospital_load(time_period):
 ### 💡 Recommendation
 {load_info['recommendation']}
 
-**Load Score:** {load_info['score']}/9
+**Load Score:** {load_info['score']}/11
 """
 
-        # Alerts
+        # Alerts (adjusted thresholds)
         alerts_list = []
-        if load_info['peak_admissions'] > 4.0:
+        if load_info['peak_admissions'] > 3.0:
             alerts_list.append("🔴 **CRITICAL:** High admission volume expected!")
-        if load_info['peak_icu'] > 1.5:
+        if load_info['peak_icu'] > 0.5:
             alerts_list.append("🔴 **CRITICAL:** ICU capacity may be exceeded!")
-        if load_info['avg_admissions'] > 3.0:
+        if load_info['avg_admissions'] > 2.0:
             alerts_list.append("🟡 **WARNING:** Above-average patient flow")
         if optimization['preparedness_plan']['status'] == 'ELEVATED':
             alerts_list.append("🟡 **WARNING:** Elevated preparedness recommended")
@@ -187,10 +193,11 @@ def predict_hospital_load(time_period):
 ### Score Breakdown
 | Factor | Score |
 |--------|-------|
-| Admissions | {min(3, int(load_info['avg_admissions']/1.5))}/3 |
-| ICU | {min(3, int(load_info['avg_icu']/0.5))}/3 |
-| Peaks | {min(3, int(load_info['peak_admissions']/2))}/3 |
-| **Total** | **{load_info['score']}/9** |
+| Admissions | {min(3, int(load_info['avg_admissions']/0.9))}/3 |
+| ICU | {min(3, int(load_info['avg_icu']/0.15))}/3 |
+| Peaks | {min(3, int(load_info['peak_admissions']/1.2))}/3 |
+| Staff | {min(2, int(load_info['avg_staff']/0.5))}/2 |
+| **Total** | **{load_info['score']}/11** |
 """
 
         # CSV output
@@ -231,8 +238,8 @@ def predict_hospital_load(time_period):
         return error_msg, "", "", "", "", None, "", None
 
 
-# Gradio Interface
-with gr.Blocks(title="Hospital Emergency Prediction", theme=gr.themes.Soft()) as app:
+# Gradio Interface (compatible with Gradio 3.x)
+with gr.Blocks(title="Hospital Emergency Prediction") as app:
     
     gr.Markdown("""
     # 🏥 Hospital Emergency Prediction System
@@ -247,7 +254,7 @@ with gr.Blocks(title="Hospital Emergency Prediction", theme=gr.themes.Soft()) as
                 label="📅 Prediction Period"
             )
             
-            predict_btn = gr.Button("🔮 Predict", variant="primary", size="lg")
+            predict_btn = gr.Button("🔮 Predict", variant="primary")
             
             gr.Markdown("""
             ---

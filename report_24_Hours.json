@@ -1,0 +1,17 @@
+{
+  "period": "Next 24 Hours",
+  "generated_at": "2026-01-03T22:36:16.724699",
+  "hours": 24,
+  "load_classification": "\ud83d\udfe2 LOW LOAD",
+  "load_score": 3,
+  "metrics": {
+    "total_admissions": 53,
+    "peak_admissions": 3.432952269378446,
+    "avg_admissions": 2.2339563306002597,
+    "peak_icu": 0.5162862539291382,
+    "avg_icu": 0.26815515756607056,
+    "peak_staff": 5,
+    "status": "NORMAL"
+  },
+  "recommendation": "\u2705 Normal patient volume. Standard staffing adequate."
+}
