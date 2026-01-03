@@ -149,8 +149,18 @@ def classify_load(predictions_df, hours=48):
 def create_visualizations(predictions_df, load_info, time_period, hours):
     """Create comprehensive visualization plots"""
     
-    # Convert timestamp to datetime
-    predictions_df['timestamp'] = pd.to_datetime(predictions_df['timestamp'])
+    # Ensure we have a proper dataframe copy
+    df = predictions_df.copy()
+    
+    # Check if datetime column exists, rename to timestamp if needed
+    if 'datetime' in df.columns:
+        df['timestamp'] = pd.to_datetime(df['datetime'])
+    elif 'timestamp' not in df.columns:
+        # Create timestamp from index if neither exists
+        now = datetime.now()
+        df['timestamp'] = [now + timedelta(hours=i) for i in range(len(df))]
+    else:
+        df['timestamp'] = pd.to_datetime(df['timestamp'])
     
     # Create figure with 4 subplots
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -166,13 +176,13 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     
     # 1. Emergency Admissions Over Time
     ax1 = axes[0, 0]
-    ax1.plot(predictions_df['timestamp'], 
-             predictions_df['predicted_emergency_admissions'], 
+    ax1.plot(df['timestamp'], 
+             df['predicted_emergency_admissions'], 
              color=colors['admissions'], linewidth=2.5, label='Predicted Admissions')
     ax1.axhline(y=load_info['avg_admissions'], color=colors['threshold'], 
                 linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_admissions"]:.1f}')
-    ax1.fill_between(predictions_df['timestamp'], 
-                     predictions_df['predicted_emergency_admissions'], 
+    ax1.fill_between(df['timestamp'], 
+                     df['predicted_emergency_admissions'], 
                      alpha=0.3, color=colors['admissions'])
     ax1.set_xlabel('Time', fontsize=11, fontweight='bold')
     ax1.set_ylabel('Admissions per Hour', fontsize=11, fontweight='bold')
@@ -184,14 +194,14 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     
     # 2. ICU Demand Over Time
     ax2 = axes[0, 1]
-    ax2.plot(predictions_df['timestamp'], 
-             predictions_df['predicted_icu_demand'], 
+    ax2.plot(df['timestamp'], 
+             df['predicted_icu_demand'], 
              color=colors['icu'], linewidth=2.5, label='ICU Demand')
     ax2.axhline(y=load_info['avg_icu'], color=colors['threshold'], 
                 linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_icu"]:.1f}')
     ax2.axhline(y=20, color='red', linestyle=':', linewidth=2, label='Capacity: 20 beds')
-    ax2.fill_between(predictions_df['timestamp'], 
-                     predictions_df['predicted_icu_demand'], 
+    ax2.fill_between(df['timestamp'], 
+                     df['predicted_icu_demand'], 
                      alpha=0.3, color=colors['icu'])
     ax2.set_xlabel('Time', fontsize=11, fontweight='bold')
     ax2.set_ylabel('ICU Beds Required', fontsize=11, fontweight='bold')
@@ -203,13 +213,13 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     
     # 3. Staff Workload Over Time
     ax3 = axes[1, 0]
-    ax3.plot(predictions_df['timestamp'], 
-             predictions_df['predicted_staff_workload'], 
+    ax3.plot(df['timestamp'], 
+             df['predicted_staff_workload'], 
              color=colors['staff'], linewidth=2.5, label='Staff Workload')
     ax3.axhline(y=load_info['avg_staff'], color=colors['threshold'], 
                 linestyle='--', linewidth=1.5, label=f'Average: {load_info["avg_staff"]:.2f}')
-    ax3.fill_between(predictions_df['timestamp'], 
-                     predictions_df['predicted_staff_workload'], 
+    ax3.fill_between(df['timestamp'], 
+                     df['predicted_staff_workload'], 
                      alpha=0.3, color=colors['staff'])
     ax3.set_xlabel('Time', fontsize=11, fontweight='bold')
     ax3.set_ylabel('Workload Index', fontsize=11, fontweight='bold')
@@ -224,7 +234,7 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     metrics = ['Admissions', 'ICU Beds', 'Staff\nWorkload']
     avg_values = [load_info['avg_admissions'], load_info['avg_icu'], load_info['avg_staff']]
     peak_values = [load_info['peak_admissions'], load_info['peak_icu'], 
-                   predictions_df['predicted_staff_workload'].max()]
+                   df['predicted_staff_workload'].max()]
     
     x = np.arange(len(metrics))
     width = 0.35
