@@ -307,10 +307,11 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
     # Update layout
     fig.update_layout(
         title_text=f'Hospital Emergency Predictions - {time_period}',
-        title_font_size=20,
+        title_font_size=22,
         title_x=0.5,
         showlegend=True,
-        height=900,
+        height=1000,
+        width=1400,
         hovermode='x unified',
         template='plotly_dark',
         legend=dict(
@@ -319,7 +320,8 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
             y=1.02,
             xanchor="right",
             x=1
-        )
+        ),
+        margin=dict(l=80, r=80, t=100, b=80)
     )
     
     # Update axes
@@ -400,10 +402,12 @@ def create_live_metrics_plot(predictions_df, load_info):
     
     fig.update_layout(
         title_text='Real-Time Metrics Dashboard',
-        title_font_size=20,
+        title_font_size=22,
         title_x=0.5,
-        height=400,
-        template='plotly_dark'
+        height=450,
+        width=1400,
+        template='plotly_dark',
+        margin=dict(l=50, r=50, t=80, b=50)
     )
     
     return fig
