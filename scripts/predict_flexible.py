@@ -140,7 +140,8 @@ class FlexiblePredictor:
             'is_weekend': (future_dates.dayofweek >= 5).astype(int),
             'temperature': 20 + 5 * np.sin(2 * np.pi * future_dates.hour / 24),
             'flu_season_index': ((future_dates.month >= 11) | (future_dates.month <= 2)).astype(float),
-            'air_quality_index': 60 + 20 * np.random.randn(hours)
+            'air_quality_index': 60 + 20 * np.random.randn(hours),
+            'bed_occupancy': np.random.randint(40, 80, hours)  # Simulate bed occupancy
         })
         
         # Add lag features from historical data (repeat last known values)
