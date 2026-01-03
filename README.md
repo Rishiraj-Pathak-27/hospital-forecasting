@@ -1,14 +1,3 @@
----
-title: Hospital Emergency Prediction
-emoji: 🏥
-colorFrom: blue
-colorTo: green
-sdk: gradio
-sdk_version: "4.0.0"
-app_file: app.py
-pinned: false
----
-
 # Hospital Emergency Prediction System
 
 > **AI-Powered Forecasting System for Emergency Admissions, ICU Demand, and Staff Workload**
