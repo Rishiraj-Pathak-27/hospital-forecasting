@@ -99,45 +99,48 @@ def classify_load(predictions_df):
             'icu_utilization': 50.0
         }
     
-    # Classification thresholds
-    high_admission_threshold = 3.0  # per hour
-    high_icu_threshold = 1.0
-    medium_admission_threshold = 2.0
-    medium_icu_threshold = 0.5
+    # Classification thresholds - adjusted for realistic hospital patterns
+    high_admission_threshold = 4.5  # per hour (very busy)
+    high_icu_threshold = 2.0  # beds (high ICU demand)
+    medium_admission_threshold = 3.0  # per hour (moderate)
+    medium_icu_threshold = 1.0  # beds (moderate ICU demand)
     
-    # Scoring system
+    # Scoring system (0-9 scale)
     score = 0
     
-    if peak_admissions > high_admission_threshold:
+    # Admission scoring (0-3 points)
+    if avg_admissions > high_admission_threshold:
         score += 3
-    elif peak_admissions > medium_admission_threshold:
+    elif avg_admissions > medium_admission_threshold:
         score += 2
-    else:
-        score += 1
-        
-    if peak_icu > high_icu_threshold:
-        score += 3
-    elif peak_icu > medium_icu_threshold:
-        score += 2
-    else:
+    elif avg_admissions > 2.0:
         score += 1
     
-    # Calculate ICU utilization
+    # ICU demand scoring (0-3 points)
+    if avg_icu > high_icu_threshold:
+        score += 3
+    elif avg_icu > medium_icu_threshold:
+        score += 2
+    elif avg_icu > 0.3:
+        score += 1
+    
+    # Peak analysis (0-3 points)
+    if peak_admissions > 5.0:
+        score += 3
+    elif peak_admissions > 3.5:
+        score += 2
+    elif peak_admissions > 2.5:
+        score += 1
+    
+    # Calculate ICU utilization for reporting
     icu_utilization = (avg_icu / 20) * 100  # 20 is ICU capacity
     
-    if icu_utilization > 70:
-        score += 3
-    elif icu_utilization > 50:
-        score += 2
-    else:
-        score += 1
-    
     # Final classification
-    if score >= 8:
+    if score >= 7:
         load_class = "🔴 HIGH LOAD"
         load_color = "#FF4444"
         recommendation = "⚠️ High patient volume expected. Increase staff by 40-50%. Activate overflow protocols."
-    elif score >= 5:
+    elif score >= 4:
         load_class = "🟡 MEDIUM LOAD"
         load_color = "#FFB347"
         recommendation = "⚡ Moderate patient volume. Increase staff by 20-30%. Monitor ICU capacity."
