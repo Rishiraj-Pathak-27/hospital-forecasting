@@ -1,5 +1,5 @@
 """
-Hospital Emergency Prediction System - Gradio Web Interface
+Hospital Emergency Prediction System - Gradio Interface
 Deployable on Hugging Face Spaces
 """
 
@@ -10,8 +10,6 @@ from datetime import datetime, timedelta
 import json
 import os
 import sys
-import warnings
-warnings.filterwarnings('ignore')
 
 # Add current directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,290 +22,197 @@ print("Initializing Hospital Prediction System...")
 predictor = FlexiblePredictor()
 print("System ready!")
 
-def validate_date_selection(date_str, hours_str):
-    """
-    Validate date selection and convert to hours ahead
-    Returns: (hours, error_message)
-    """
-    try:
-        selected_date = datetime.strptime(date_str, "%Y-%m-%d")
-        current_date = datetime.now()
-        
-        # Calculate hours difference
-        delta = selected_date - current_date
-        hours_ahead = int(delta.total_seconds() / 3600)
-        
-        # Validate range
-        if hours_ahead < 0:
-            return None, "❌ Error: Cannot predict for past dates!"
-        
-        if hours_ahead > 336:  # Max 2 weeks (14 days)
-            return None, "❌ Error: Maximum prediction range is 2 weeks (336 hours)!"
-        
-        # Validate against allowed options
-        if hours_str == "24h":
-            if hours_ahead < 1 or hours_ahead > 24:
-                return None, "❌ Error: For 24h option, date must be within next 24 hours!"
-            return 24, None
-            
-        elif hours_str == "48h":
-            if hours_ahead < 1 or hours_ahead > 48:
-                return None, "❌ Error: For 48h option, date must be within next 48 hours!"
-            return 48, None
-            
-        elif hours_str == "week":
-            if hours_ahead < 1 or hours_ahead > 168:
-                return None, "❌ Error: For 1 week option, date must be within next 7 days!"
-            return 168, None
-            
-        elif hours_str == "2weeks":
-            if hours_ahead < 169 or hours_ahead > 336:
-                return None, "❌ Error: For week-to-next-week option, date must be 8-14 days ahead!"
-            return hours_ahead, None
-            
-        else:
-            return None, "❌ Error: Invalid time period selected!"
-            
-    except Exception as e:
-        return None, f"❌ Error: {str(e)}"
 
 def classify_load(predictions_df):
-    """
-    Automatically classify hospital load as HIGH/MEDIUM/LOW
-    Based on predicted admissions and ICU demand
-    """
+    """Classify hospital load as HIGH/MEDIUM/LOW"""
     try:
-        # Ensure predictions_df is a DataFrame
-        if not isinstance(predictions_df, pd.DataFrame):
-            raise ValueError(f"Expected DataFrame, got {type(predictions_df)}")
-            
         avg_admissions = float(predictions_df['predicted_emergency_admissions'].mean())
         peak_admissions = float(predictions_df['predicted_emergency_admissions'].max())
         avg_icu = float(predictions_df['predicted_icu_demand'].mean())
         peak_icu = float(predictions_df['predicted_icu_demand'].max())
+        avg_staff = float(predictions_df['predicted_staff_workload'].mean())
     except Exception as e:
-        # Return safe defaults if there's an error
         return {
             'classification': "🟡 MEDIUM LOAD",
-            'color': "#FFB347",
             'score': 5,
-            'recommendation': f"Error in classification: {str(e)}",
+            'recommendation': f"Unable to classify: {str(e)}",
             'avg_admissions': 2.0,
             'peak_admissions': 3.0,
             'avg_icu': 0.5,
             'peak_icu': 1.0,
-            'icu_utilization': 50.0
+            'avg_staff': 0.5,
+            'icu_utilization': 2.5
         }
     
-    # Classification thresholds - adjusted for realistic hospital patterns
-    high_admission_threshold = 4.5  # per hour (very busy)
-    high_icu_threshold = 2.0  # beds (high ICU demand)
-    medium_admission_threshold = 3.0  # per hour (moderate)
-    medium_icu_threshold = 1.0  # beds (moderate ICU demand)
-    
-    # Scoring system (0-9 scale)
+    # Scoring based on metrics
     score = 0
     
-    # Admission scoring (0-3 points)
-    if avg_admissions > high_admission_threshold:
+    # Admission scoring
+    if avg_admissions > 4.0:
         score += 3
-    elif avg_admissions > medium_admission_threshold:
+    elif avg_admissions > 2.5:
         score += 2
-    elif avg_admissions > 2.0:
+    elif avg_admissions > 1.5:
         score += 1
     
-    # ICU demand scoring (0-3 points)
-    if avg_icu > high_icu_threshold:
+    # ICU scoring
+    if avg_icu > 1.5:
         score += 3
-    elif avg_icu > medium_icu_threshold:
+    elif avg_icu > 0.8:
         score += 2
     elif avg_icu > 0.3:
         score += 1
     
-    # Peak analysis (0-3 points)
+    # Peak scoring
     if peak_admissions > 5.0:
         score += 3
-    elif peak_admissions > 3.5:
+    elif peak_admissions > 3.0:
         score += 2
-    elif peak_admissions > 2.5:
+    elif peak_admissions > 2.0:
         score += 1
     
-    # Calculate ICU utilization for reporting
-    icu_utilization = (avg_icu / 20) * 100  # 20 is ICU capacity
+    icu_utilization = (avg_icu / 20) * 100
     
-    # Final classification
+    # Classification
     if score >= 7:
         load_class = "🔴 HIGH LOAD"
-        load_color = "#FF4444"
         recommendation = "⚠️ High patient volume expected. Increase staff by 40-50%. Activate overflow protocols."
     elif score >= 4:
         load_class = "🟡 MEDIUM LOAD"
-        load_color = "#FFB347"
         recommendation = "⚡ Moderate patient volume. Increase staff by 20-30%. Monitor ICU capacity."
     else:
         load_class = "🟢 LOW LOAD"
-        load_color = "#44FF44"
         recommendation = "✅ Normal patient volume. Standard staffing adequate."
     
     return {
         'classification': load_class,
-        'color': load_color,
         'score': score,
         'recommendation': recommendation,
         'avg_admissions': avg_admissions,
         'peak_admissions': peak_admissions,
         'avg_icu': avg_icu,
         'peak_icu': peak_icu,
+        'avg_staff': avg_staff,
         'icu_utilization': icu_utilization
     }
 
-def predict_hospital_load(date_input, time_period, auto_classify):
-    """
-    Main prediction function for Gradio interface
-    """
+
+def predict_hospital_load(time_period):
+    """Main prediction function"""
     try:
-        # If auto-classify is enabled, use default 48h prediction from now
-        if auto_classify:
-            hours = 48
-            start_offset = 0
-            period_name = "Next 48 Hours (Auto)"
-            status_msg = "📊 Automatic load classification - Next 48 hours"
-        else:
-            # Parse user's date input
-            try:
-                selected_date = datetime.strptime(date_input, "%Y-%m-%d")
-                current_date = datetime.now()
-                
-                # Calculate hours from now to selected date (start of day)
-                delta = selected_date - current_date
-                start_offset = int(delta.total_seconds() / 3600)
-                
-                # Allow same-day predictions (if offset is slightly negative due to time)
-                if start_offset < 0 and start_offset >= -24:
-                    start_offset = 0  # Start from now if selecting today
-                
-                # Validate the offset
-                if start_offset < -24:
-                    return "❌ Error: Cannot predict for past dates!", "", "", "", "", None, "", None
-                
-                if start_offset > 336:  # Max 14 days ahead
-                    return "❌ Error: Maximum prediction range is 14 days (336 hours) ahead!", "", "", "", "", None, "", None
-                    
-            except ValueError:
-                return "❌ Error: Invalid date format! Please use YYYY-MM-DD format.", "", "", "", "", None, "", None
-            
-            # Map time period to hours
-            period_mapping = {
-                "24h": 24,
-                "48h": 48,
-                "7days": 168,
-                "14days": 336
-            }
-            
-            period_names = {
-                "24h": "Next 24 Hours",
-                "48h": "Next 48 Hours", 
-                "7days": "Next 7 Days",
-                "14days": "Next 14 Days"
-            }
-            
-            hours = period_mapping.get(time_period, 48)
-            period_name = period_names.get(time_period, f"Next {hours} Hours")
-            
-            # Format display dates
-            prediction_start = current_date + timedelta(hours=start_offset)
-            prediction_end = prediction_start + timedelta(hours=hours)
-            status_msg = f"✅ Prediction: {period_name} starting {prediction_start.strftime('%Y-%m-%d %H:%M')} to {prediction_end.strftime('%Y-%m-%d %H:%M')}"
+        # Map time period to hours
+        period_mapping = {
+            "24 Hours": 24,
+            "48 Hours": 48,
+            "7 Days": 168,
+            "14 Days": 336
+        }
         
-        # Make predictions with calculated offset
+        hours = period_mapping.get(time_period, 48)
+        period_name = f"Next {time_period}"
+        
+        # Make predictions starting from now
         predictions_df, optimization = predictor._predict_period(
             hours=hours,
             period_name=period_name,
-            start_offset=start_offset
+            start_offset=0
         )
         
         # Classify load
         load_info = classify_load(predictions_df)
         
+        # Status message
+        now = datetime.now()
+        end_time = now + timedelta(hours=hours)
+        status_msg = f"📊 **{now.strftime('%Y-%m-%d %H:%M')} → {end_time.strftime('%Y-%m-%d %H:%M')}**"
+        
         # Create summary
         summary = f"""
 ## {load_info['classification']}
 
-**Period:** {period_name}  
-**Duration:** {hours} hours  
-**Status:** {optimization['preparedness_plan']['status']}
+**Period:** {period_name} | **Duration:** {hours} hours | **Status:** {optimization['preparedness_plan']['status']}
 
 ### 📊 Predicted Metrics
-- **Total Admissions:** {int(predictions_df['predicted_emergency_admissions'].sum())}
-- **Peak Hourly Admissions:** {load_info['peak_admissions']:.1f}
-- **Average Hourly Admissions:** {load_info['avg_admissions']:.1f}
-- **Peak ICU Demand:** {load_info['peak_icu']:.1f} beds
-- **Average ICU Demand:** {load_info['avg_icu']:.1f} beds
-- **ICU Utilization:** {load_info['icu_utilization']:.1f}%
+| Metric | Value |
+|--------|-------|
+| Total Admissions | {int(predictions_df['predicted_emergency_admissions'].sum())} |
+| Peak Hourly Admissions | {load_info['peak_admissions']:.1f} |
+| Average Hourly Admissions | {load_info['avg_admissions']:.1f} |
+| Peak ICU Demand | {load_info['peak_icu']:.1f} beds |
+| Average ICU Demand | {load_info['avg_icu']:.1f} beds |
+| ICU Utilization | {load_info['icu_utilization']:.1f}% |
 
-### 👥 Staffing Requirements
-- **Peak Staff Needed:** {optimization['staff_requirements']['peak_staff']} personnel
-- **Average Staff/Hour:** {optimization['staff_requirements']['avg_staff']:.1f}
-- **Total Staff-Hours (24h):** {optimization['staff_requirements'].get('total_staff_24h', 'N/A')}
+### 👥 Staffing
+| Metric | Value |
+|--------|-------|
+| Peak Staff | {optimization['staff_requirements']['peak_staff']} |
+| Avg Staff/Hour | {optimization['staff_requirements']['avg_staff']:.1f} |
 
 ### 💡 Recommendation
 {load_info['recommendation']}
+
+**Load Score:** {load_info['score']}/9
 """
 
-        # Create alerts section
-        alerts_text = ""
-        if optimization['bed_assessment']['alerts']:
-            alerts_text = "### ⚠️ Alerts\n"
-            for alert in optimization['bed_assessment']['alerts']:
-                alerts_text += f"- **[{alert['severity']}]** {alert['message']}\n"
-                alerts_text += f"  - Action: {alert['action']}\n"
+        # Alerts
+        alerts_list = []
+        if load_info['peak_admissions'] > 4.0:
+            alerts_list.append("🔴 **CRITICAL:** High admission volume expected!")
+        if load_info['peak_icu'] > 1.5:
+            alerts_list.append("🔴 **CRITICAL:** ICU capacity may be exceeded!")
+        if load_info['avg_admissions'] > 3.0:
+            alerts_list.append("🟡 **WARNING:** Above-average patient flow")
+        if optimization['preparedness_plan']['status'] == 'ELEVATED':
+            alerts_list.append("🟡 **WARNING:** Elevated preparedness recommended")
+        if not alerts_list:
+            alerts_list.append("✅ No alerts - Normal operations expected")
         
-        # Create detailed metrics
+        alerts_text = "\n\n".join(alerts_list)
+
+        # Detailed analysis
         detailed = f"""
-### Detailed Analysis
+### Emergency Department
+- **Total Admissions:** {int(predictions_df['predicted_emergency_admissions'].sum())}
+- **Peak Hour:** {load_info['peak_admissions']:.1f} | **Average:** {load_info['avg_admissions']:.1f}
 
-**Emergency Department:**
-- Total Expected Admissions: {int(predictions_df['predicted_emergency_admissions'].sum())}
-- Peak Hour: {load_info['peak_admissions']:.1f} admissions
-- Average per Hour: {load_info['avg_admissions']:.1f}
+### ICU Capacity (20 beds)
+- **Peak:** {load_info['peak_icu']:.1f} beds ({load_info['peak_icu']/20*100:.1f}%)
+- **Average:** {load_info['avg_icu']:.1f} beds
+- **Critical Hours:** {len(optimization['bed_assessment']['critical_hours'])}
 
-**ICU Capacity:**
-- Peak Demand: {load_info['peak_icu']:.1f} / 20 beds ({load_info['icu_utilization']:.1f}%)
-- Average Demand: {load_info['avg_icu']:.1f} beds
-- Critical Hours: {len(optimization['bed_assessment']['critical_hours'])}
+### Staffing
+- **Peak Required:** {optimization['staff_requirements']['peak_staff']}
+- **Shifts:** {len(optimization['staff_requirements']['shifts'])}
 
-**Resource Optimization:**
-- Recommended Shifts: {len(optimization['staff_requirements']['shifts'])}
-- Peak Staff: {optimization['staff_requirements']['peak_staff']}
-- Status: {optimization['preparedness_plan']['status']}
-
-**Load Classification Score:** {load_info['score']}/9
-- Score 8-9: HIGH LOAD 🔴
-- Score 5-7: MEDIUM LOAD 🟡
-- Score 0-4: LOW LOAD 🟢
+### Score Breakdown
+| Factor | Score |
+|--------|-------|
+| Admissions | {min(3, int(load_info['avg_admissions']/1.5))}/3 |
+| ICU | {min(3, int(load_info['avg_icu']/0.5))}/3 |
+| Peaks | {min(3, int(load_info['peak_admissions']/2))}/3 |
+| **Total** | **{load_info['score']}/9** |
 """
 
-        # Convert predictions to CSV format for download
+        # CSV output
         csv_output = predictions_df.to_csv(index=False)
         
-        # Save CSV file for download
-        csv_filename = f"predictions_{period_name.replace(' ', '_').replace('(', '').replace(')', '')}.csv"
-        csv_path = os.path.join("data", csv_filename)
+        # Save files
+        csv_path = f"predictions_{time_period.replace(' ', '_')}.csv"
         predictions_df.to_csv(csv_path, index=False)
         
-        # Create JSON report
+        # JSON report
         report = {
             'period': period_name,
             'generated_at': datetime.now().isoformat(),
             'hours': hours,
             'load_classification': load_info['classification'],
             'load_score': load_info['score'],
-            'summary': {
+            'metrics': {
                 'total_admissions': int(predictions_df['predicted_emergency_admissions'].sum()),
                 'peak_admissions': float(load_info['peak_admissions']),
                 'avg_admissions': float(load_info['avg_admissions']),
                 'peak_icu': float(load_info['peak_icu']),
-                'icu_utilization': float(load_info['icu_utilization']),
+                'avg_icu': float(load_info['avg_icu']),
                 'peak_staff': int(optimization['staff_requirements']['peak_staff']),
                 'status': optimization['preparedness_plan']['status']
             },
@@ -315,52 +220,46 @@ def predict_hospital_load(date_input, time_period, auto_classify):
         }
         json_output = json.dumps(report, indent=2)
         
-        # Save JSON file for download
-        json_filename = f"report_{period_name.replace(' ', '_').replace('(', '').replace(')', '')}.json"
-        json_path = os.path.join("reports", json_filename)
+        json_path = f"report_{time_period.replace(' ', '_')}.json"
         with open(json_path, 'w') as f:
             json.dump(report, f, indent=2)
         
         return status_msg, summary, alerts_text, detailed, csv_output, csv_path, json_output, json_path
         
     except Exception as e:
-        error_msg = f"❌ Error: {str(e)}\n\nPlease try again or contact support."
+        error_msg = f"❌ Error: {str(e)}"
         return error_msg, "", "", "", "", None, "", None
 
-# Create Gradio Interface
-with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Soft()) as app:
+
+# Gradio Interface
+with gr.Blocks(title="Hospital Emergency Prediction", theme=gr.themes.Soft()) as app:
     
-    gr.Markdown("# 🏥 Hospital Emergency Prediction")
+    gr.Markdown("""
+    # 🏥 Hospital Emergency Prediction System
+    **AI-powered forecasting for emergency admissions, ICU demand, and staff workload**
+    """)
     
     with gr.Row():
         with gr.Column(scale=1):
-            auto_mode = gr.Checkbox(
-                label="Auto-Classify",
-                value=False
-            )
-            
-            date_input = gr.Textbox(
-                label="Start Date (YYYY-MM-DD)",
-                value=datetime.now().strftime("%Y-%m-%d"),
-                placeholder="Enter start date for prediction (e.g., 2026-01-05)",
-                info="Predictions will start from this date"
-            )
-            
             time_period = gr.Radio(
-                choices=[
-                    ("24 Hours", "24h"),
-                    ("48 Hours", "48h"),
-                    ("7 Days", "7days"),
-                    ("14 Days", "14days")
-                ],
-                value="48h",
-                label="Period"
+                choices=["24 Hours", "48 Hours", "7 Days", "14 Days"],
+                value="48 Hours",
+                label="📅 Prediction Period"
             )
             
-            predict_btn = gr.Button("Predict", variant="primary", size="lg")
+            predict_btn = gr.Button("🔮 Predict", variant="primary", size="lg")
+            
+            gr.Markdown("""
+            ---
+            ### About
+            - **Admissions**: Patient arrival forecasting
+            - **ICU Demand**: Intensive care bed needs
+            - **Staffing**: Optimal personnel allocation
+            - **Models**: XGBoost trained on 180 days data
+            """)
         
         with gr.Column(scale=2):
-            status_output = gr.Markdown("Click Predict to start")
+            status_output = gr.Markdown("*Select period and click Predict*")
             
             with gr.Tabs():
                 with gr.Tab("📊 Summary"):
@@ -369,41 +268,21 @@ with gr.Blocks(title="Hospital Emergency Prediction System", theme=gr.themes.Sof
                 with gr.Tab("⚠️ Alerts"):
                     alerts_output = gr.Markdown("Alerts will appear here...")
                 
-                with gr.Tab("📈 Detailed Analysis"):
-                    detailed_output = gr.Markdown("Detailed metrics will appear here...")
+                with gr.Tab("📈 Details"):
+                    detailed_output = gr.Markdown("Detailed metrics...")
                 
-                with gr.Tab("💾 Download Data"):
-                    gr.Markdown("### Download Predictions")
-                    csv_output = gr.Textbox(
-                        label="CSV Data Preview",
-                        lines=10,
-                        max_lines=20,
-                        placeholder="Prediction data in CSV format..."
-                    )
-                    csv_download = gr.File(label="📥 Download CSV File")
-                    
-                    json_output = gr.Textbox(
-                        label="JSON Report Preview",
-                        lines=10,
-                        max_lines=20,
-                        placeholder="Full report in JSON format..."
-                    )
-                    json_download = gr.File(label="📥 Download JSON File")
+                with gr.Tab("💾 Download"):
+                    csv_output = gr.Textbox(label="CSV Preview", lines=6)
+                    csv_download = gr.File(label="📥 CSV")
+                    json_output = gr.Textbox(label="JSON Preview", lines=6)
+                    json_download = gr.File(label="📥 JSON")
     
-    # Connect button to prediction function
     predict_btn.click(
         fn=predict_hospital_load,
-        inputs=[date_input, time_period, auto_mode],
-        outputs=[status_output, summary_output, alerts_output, detailed_output, csv_output, csv_download, json_output, json_download]
+        inputs=[time_period],
+        outputs=[status_output, summary_output, alerts_output, detailed_output, 
+                 csv_output, csv_download, json_output, json_download]
     )
-    
 
-
-# Launch settings
 if __name__ == "__main__":
-    app.launch(
-        server_name="127.0.0.1",  # Use localhost instead
-        server_port=7860,
-        inbrowser=False,  # Don't auto-open browser
-        prevent_thread_lock=False
-    )
+    app.launch()
