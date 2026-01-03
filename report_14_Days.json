@@ -1,17 +1,17 @@
 {
   "period": "Next 14 Days",
-  "generated_at": "2026-01-03T22:36:27.085092",
+  "generated_at": "2026-01-03T22:40:54.083937",
   "hours": 336,
-  "load_classification": "\ud83d\udfe2 LOW LOAD",
-  "load_score": 3,
+  "load_classification": "\ud83d\udfe1 MEDIUM LOAD",
+  "load_score": 7,
   "metrics": {
-    "total_admissions": 673,
-    "peak_admissions": 3.8247385072930076,
-    "avg_admissions": 2.0036616212091536,
-    "peak_icu": 0.5347718596458435,
-    "avg_icu": 0.2485387921333313,
+    "total_admissions": 679,
+    "peak_admissions": 3.683536594404074,
+    "avg_admissions": 2.023234295466582,
+    "peak_icu": 0.5493876934051514,
+    "avg_icu": 0.24997593462467194,
     "peak_staff": 5,
     "status": "ELEVATED"
   },
-  "recommendation": "\u2705 Normal patient volume. Standard staffing adequate."
+  "recommendation": "\u26a1 Moderate patient volume. Increase staff by 20-30%. Monitor ICU capacity."
 }

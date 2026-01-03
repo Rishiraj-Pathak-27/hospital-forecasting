@@ -23,14 +23,15 @@ predictor = FlexiblePredictor()
 print("System ready!")
 
 
-def classify_load(predictions_df):
-    """Classify hospital load as HIGH/MEDIUM/LOW"""
+def classify_load(predictions_df, hours=48):
+    """Classify hospital load as HIGH/MEDIUM/LOW based on time period"""
     try:
         avg_admissions = float(predictions_df['predicted_emergency_admissions'].mean())
         peak_admissions = float(predictions_df['predicted_emergency_admissions'].max())
         avg_icu = float(predictions_df['predicted_icu_demand'].mean())
         peak_icu = float(predictions_df['predicted_icu_demand'].max())
         avg_staff = float(predictions_df['predicted_staff_workload'].mean())
+        total_admissions = float(predictions_df['predicted_emergency_admissions'].sum())
     except Exception as e:
         return {
             'classification': "🟡 MEDIUM LOAD",
@@ -41,37 +42,71 @@ def classify_load(predictions_df):
             'avg_icu': 0.5,
             'peak_icu': 1.0,
             'avg_staff': 0.5,
-            'icu_utilization': 2.5
+            'icu_utilization': 2.5,
+            'total_admissions': 50
         }
     
-    # Scoring based on metrics (adjusted thresholds for better sensitivity)
+    # Dynamic thresholds based on time period
+    # Shorter periods = stricter thresholds, Longer periods = higher totals expected
+    if hours <= 24:
+        # 24 hours - focus on hourly averages
+        adm_high, adm_med, adm_low = 2.8, 2.2, 1.5
+        icu_high, icu_med, icu_low = 0.6, 0.35, 0.15
+        peak_high, peak_med, peak_low = 4.0, 3.0, 2.0
+        total_high, total_med = 55, 40
+    elif hours <= 48:
+        # 48 hours - balanced thresholds
+        adm_high, adm_med, adm_low = 2.5, 1.9, 1.3
+        icu_high, icu_med, icu_low = 0.45, 0.28, 0.12
+        peak_high, peak_med, peak_low = 3.8, 2.8, 1.8
+        total_high, total_med = 100, 75
+    elif hours <= 168:
+        # 7 days - weekly patterns matter
+        adm_high, adm_med, adm_low = 2.3, 1.7, 1.1
+        icu_high, icu_med, icu_low = 0.35, 0.22, 0.10
+        peak_high, peak_med, peak_low = 3.5, 2.5, 1.6
+        total_high, total_med = 350, 250
+    else:
+        # 14 days - long-term trends
+        adm_high, adm_med, adm_low = 2.1, 1.5, 0.9
+        icu_high, icu_med, icu_low = 0.30, 0.18, 0.08
+        peak_high, peak_med, peak_low = 3.2, 2.3, 1.4
+        total_high, total_med = 680, 500
+    
+    # Scoring based on dynamic thresholds
     score = 0
     
-    # Admission scoring (lowered thresholds)
-    if avg_admissions > 2.5:
+    # Admission scoring
+    if avg_admissions > adm_high:
         score += 3
-    elif avg_admissions > 1.8:
+    elif avg_admissions > adm_med:
         score += 2
-    elif avg_admissions > 1.0:
+    elif avg_admissions > adm_low:
         score += 1
     
-    # ICU scoring (lowered thresholds)
-    if avg_icu > 0.5:
+    # ICU scoring
+    if avg_icu > icu_high:
         score += 3
-    elif avg_icu > 0.25:
+    elif avg_icu > icu_med:
         score += 2
-    elif avg_icu > 0.1:
+    elif avg_icu > icu_low:
         score += 1
     
-    # Peak scoring (lowered thresholds)
-    if peak_admissions > 3.5:
+    # Peak scoring
+    if peak_admissions > peak_high:
         score += 3
-    elif peak_admissions > 2.5:
+    elif peak_admissions > peak_med:
         score += 2
-    elif peak_admissions > 1.5:
+    elif peak_admissions > peak_low:
         score += 1
     
-    # Staff workload scoring (new factor)
+    # Total admissions scoring (period-specific)
+    if total_admissions > total_high:
+        score += 2
+    elif total_admissions > total_med:
+        score += 1
+    
+    # Staff workload scoring
     if avg_staff > 1.0:
         score += 2
     elif avg_staff > 0.5:
@@ -79,11 +114,11 @@ def classify_load(predictions_df):
     
     icu_utilization = (avg_icu / 20) * 100
     
-    # Classification (adjusted score ranges for 11-point scale)
-    if score >= 8:
+    # Classification (13-point scale now)
+    if score >= 9:
         load_class = "🔴 HIGH LOAD"
         recommendation = "⚠️ High patient volume expected. Increase staff by 40-50%. Activate overflow protocols."
-    elif score >= 4:
+    elif score >= 5:
         load_class = "🟡 MEDIUM LOAD"
         recommendation = "⚡ Moderate patient volume. Increase staff by 20-30%. Monitor ICU capacity."
     else:
@@ -99,7 +134,8 @@ def classify_load(predictions_df):
         'avg_icu': avg_icu,
         'peak_icu': peak_icu,
         'avg_staff': avg_staff,
-        'icu_utilization': icu_utilization
+        'icu_utilization': icu_utilization,
+        'total_admissions': total_admissions
     }
 
 
@@ -124,8 +160,8 @@ def predict_hospital_load(time_period):
             start_offset=0
         )
         
-        # Classify load
-        load_info = classify_load(predictions_df)
+        # Classify load with period-specific thresholds
+        load_info = classify_load(predictions_df, hours)
         
         # Status message
         now = datetime.now()
@@ -157,16 +193,26 @@ def predict_hospital_load(time_period):
 ### 💡 Recommendation
 {load_info['recommendation']}
 
-**Load Score:** {load_info['score']}/11
+**Load Score:** {load_info['score']}/13 | **Period:** {time_period}
 """
 
-        # Alerts (adjusted thresholds)
+        # Alerts (period-adjusted thresholds)
         alerts_list = []
-        if load_info['peak_admissions'] > 3.0:
+        # Dynamic alert thresholds based on period
+        if hours <= 24:
+            peak_alert, icu_alert, avg_alert = 3.5, 0.5, 2.5
+        elif hours <= 48:
+            peak_alert, icu_alert, avg_alert = 3.2, 0.4, 2.2
+        elif hours <= 168:
+            peak_alert, icu_alert, avg_alert = 3.0, 0.3, 2.0
+        else:
+            peak_alert, icu_alert, avg_alert = 2.8, 0.25, 1.8
+            
+        if load_info['peak_admissions'] > peak_alert:
             alerts_list.append("🔴 **CRITICAL:** High admission volume expected!")
-        if load_info['peak_icu'] > 0.5:
+        if load_info['peak_icu'] > icu_alert:
             alerts_list.append("🔴 **CRITICAL:** ICU capacity may be exceeded!")
-        if load_info['avg_admissions'] > 2.0:
+        if load_info['avg_admissions'] > avg_alert:
             alerts_list.append("🟡 **WARNING:** Above-average patient flow")
         if optimization['preparedness_plan']['status'] == 'ELEVATED':
             alerts_list.append("🟡 **WARNING:** Elevated preparedness recommended")
@@ -190,14 +236,17 @@ def predict_hospital_load(time_period):
 - **Peak Required:** {optimization['staff_requirements']['peak_staff']}
 - **Shifts:** {len(optimization['staff_requirements']['shifts'])}
 
-### Score Breakdown
+### Score Breakdown ({time_period})
 | Factor | Score |
 |--------|-------|
-| Admissions | {min(3, int(load_info['avg_admissions']/0.9))}/3 |
-| ICU | {min(3, int(load_info['avg_icu']/0.15))}/3 |
-| Peaks | {min(3, int(load_info['peak_admissions']/1.2))}/3 |
-| Staff | {min(2, int(load_info['avg_staff']/0.5))}/2 |
-| **Total** | **{load_info['score']}/11** |
+| Admissions | /3 |
+| ICU Demand | /3 |
+| Peak Volume | /3 |
+| Total Volume | /2 |
+| Staff Load | /2 |
+| **Total** | **{load_info['score']}/13** |
+
+*Thresholds adjusted for {time_period} prediction window*
 """
 
         # CSV output
