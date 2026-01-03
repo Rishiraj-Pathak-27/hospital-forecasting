@@ -163,15 +163,15 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
         step = max(1, len(df) // 150)  # Keep ~150 points for faster rendering
         df = df.iloc[::step].reset_index(drop=True)
     
-    # Create subplots
+    # Create subplots with better spacing
     fig = make_subplots(
         rows=2, cols=2,
         subplot_titles=('Emergency Admissions Forecast', 'ICU Demand Forecast',
                        'Staff Workload Forecast', 'Peak vs Average Comparison'),
         specs=[[{"secondary_y": False}, {"secondary_y": False}],
                [{"secondary_y": False}, {"type": "bar"}]],
-        vertical_spacing=0.12,
-        horizontal_spacing=0.1
+        vertical_spacing=0.18,
+        horizontal_spacing=0.12
     )
     
     # Color scheme
@@ -309,35 +309,40 @@ def create_visualizations(predictions_df, load_info, time_period, hours):
         row=2, col=2
     )
     
-    # Update layout - all 4 graphs visible at once
+    # Update layout - properly spaced for all 4 graphs
     fig.update_layout(
         title_text=f'Hospital Emergency Predictions - {time_period}',
-        title_font_size=20,
+        title_font_size=18,
         title_x=0.5,
         showlegend=True,
-        height=1100,
+        height=1200,
         hovermode='x unified',
         template='plotly_dark',
         legend=dict(
             orientation="h",
             yanchor="bottom",
-            y=-0.15,
+            y=-0.08,
             xanchor="center",
-            x=0.5
+            x=0.5,
+            font=dict(size=10)
         ),
-        margin=dict(l=60, r=60, t=80, b=100)
+        margin=dict(l=80, r=80, t=100, b=120)
     )
     
-    # Update axes
-    fig.update_xaxes(title_text="Time", row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_xaxes(title_text="Time", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_xaxes(title_text="Time", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_xaxes(title_text="Metric", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    # Update subplot title styling
+    for annotation in fig['layout']['annotations']:
+        annotation['font'] = dict(size=13, color='#FFFFFF')
     
-    fig.update_yaxes(title_text="Admissions/Hour", row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_yaxes(title_text="ICU Beds", row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_yaxes(title_text="Workload Index", row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
-    fig.update_yaxes(title_text="Value", row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    # Update axes with smaller fonts
+    fig.update_xaxes(title_text="Time", title_font_size=11, row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Time", title_font_size=11, row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Time", title_font_size=11, row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_xaxes(title_text="Metric", title_font_size=11, row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    
+    fig.update_yaxes(title_text="Admissions/Hour", title_font_size=11, row=1, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="ICU Beds", title_font_size=11, row=1, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="Workload Index", title_font_size=11, row=2, col=1, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
+    fig.update_yaxes(title_text="Value", title_font_size=11, row=2, col=2, showgrid=True, gridcolor='rgba(128,128,128,0.2)')
     
     return fig
 
