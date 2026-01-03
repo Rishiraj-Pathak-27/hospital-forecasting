@@ -12,14 +12,18 @@ import os
 import warnings
 warnings.filterwarnings('ignore')
 
-# Import prediction modules
-from scripts.predict_flexible import FlexiblePredictor
-from scripts.resource_optimizer import HospitalResourceOptimizer
+# Lazy loading - only initialize when first prediction is made
+predictor = None
 
-# Initialize predictor (load once at startup)
-print("Initializing Hospital Prediction System...")
-predictor = FlexiblePredictor()
-print("System ready!")
+def get_predictor():
+    """Lazy load predictor on first use"""
+    global predictor
+    if predictor is None:
+        print("Loading models and data...")
+        from scripts.predict_flexible import FlexiblePredictor
+        predictor = FlexiblePredictor()
+        print("System ready!")
+    return predictor
 
 def validate_date_selection(date_str, hours_str):
     """
@@ -142,6 +146,9 @@ def predict_hospital_load(date_input, time_period, auto_classify):
     Main prediction function for Gradio interface
     """
     try:
+        # Lazy load predictor on first use
+        pred = get_predictor()
+        
         # If auto-classify is enabled, use default 48h prediction
         if auto_classify:
             hours = 48
@@ -163,7 +170,7 @@ def predict_hospital_load(date_input, time_period, auto_classify):
             status_msg = f"✅ Prediction for: {period_name} (starting {date_input})"
         
         # Make predictions
-        predictions_df, optimization = predictor._predict_period(
+        predictions_df, optimization = pred._predict_period(
             hours=hours,
             period_name=period_name,
             start_offset=0
